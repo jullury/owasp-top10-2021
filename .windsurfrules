@@ -1,0 +1,2 @@
+rules:
+    - use angular commit message format when generating commit messages
