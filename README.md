@@ -6,6 +6,13 @@ This repository contains demonstration code and examples for the [OWASP Top 10](
 
 - `A01/`: Demonstrates **Broken Access Control** (vulnerable and best practice routes)
 - `A02/`: Demonstrates **Cryptographic Failures** (vulnerable and best practice routes)
+- `A03/`: Demonstrates **Injection** (classic SQL injection, ORM-based injection, and command injection, both vulnerable and safe endpoints):
+    - `/login` : Vulnerable SQL Injection
+    - `/login/safe` : Safe SQL (parameterized)
+    - `/login/orm_vuln` : Vulnerable ORM Injection
+    - `/login/orm_safe` : Safe ORM (parameterized)
+    - `/cmd_injection` : View File (Command Injection Demo, vulnerable to command injection)
+    - `/safe_view_file` : Safe File Viewer (prevents command injection by validating input and not using the shell)
 - (Add more directories for each OWASP Top 10 item as you implement them)
 
 ## How to Use

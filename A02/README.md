@@ -36,7 +36,7 @@ This example demonstrates both vulnerable and best practice implementations of c
    python app.py
    ```
 
-4. Visit [http://localhost:5000](http://localhost:5000) and follow the links to see the vulnerabilities in action.
+4. Visit [http://localhost:5002](http://localhost:5002) and follow the links to see the vulnerabilities in action.
 
 ## How to Fix
 
