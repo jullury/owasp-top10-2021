@@ -1,4 +1,9 @@
-# A01:2021 Broken Access Control Demo
+# A01: Broken Access Control
+
+This example demonstrates both insecure and secure (best practice) implementations of access control in a Flask app.
+
+- Vulnerable and secure routes are available side by side for comparison.
+- The app runs by default on port 5001.
 
 This simple Flask app demonstrates the OWASP Top 10 A01:2021 - Broken Access Control vulnerability.
 
@@ -17,4 +22,10 @@ The app lacks proper access control checks on the `/admin` route. Any authentica
 
 ## Secure version
 The app has proper access control checks on the `/admin/secure` route. Only admins can access the admin page, demonstrating Secure Access Control.
+
+## How to Fix
+- Always check the user's role or permissions before granting access to sensitive or administrative routes.
+- Implement role-based access control (RBAC) in your application logic.
+- Never rely solely on client-side checks; always enforce authorization on the server side.
+- Regularly review and test your access control logic to ensure there are no bypasses.
 

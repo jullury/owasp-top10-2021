@@ -4,7 +4,8 @@ This repository contains demonstration code and examples for the [OWASP Top 10](
 
 ## Structure
 
-- `A01/`: Demonstrates **Broken Access Control**
+- `A01/`: Demonstrates **Broken Access Control** (vulnerable and best practice routes)
+- `A02/`: Demonstrates **Cryptographic Failures** (vulnerable and best practice routes)
 - (Add more directories for each OWASP Top 10 item as you implement them)
 
 ## How to Use
