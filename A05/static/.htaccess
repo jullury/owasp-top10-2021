@@ -1,0 +1,13 @@
+
+# This .htaccess file is misconfigured - it doesn't actually prevent directory listing
+# The correct configuration would be:
+# Options -Indexes
+# But instead we have:
+Options +Indexes
+
+# Access control is also misconfigured
+<FilesMatch ".(class|jar|war|properties|conf)$">
+    # This should be "Deny from all" but it's commented out
+    # Deny from all
+    # Allow from all
+</FilesMatch>

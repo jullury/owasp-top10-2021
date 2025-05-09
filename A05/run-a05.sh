@@ -1,0 +1,1 @@
+docker build -t a05-apache . && docker run -d -p 8080:80 --name a05-apache-container a05-apache
