@@ -1,65 +1,85 @@
-# A03: Injection
+# A03:2021 - Injection Evidence Case
 
-This example demonstrates SQL Injection vulnerabilities and how to prevent them, as described in the [OWASP Top 10 A03:2021 - Injection](https://owasp.org/Top10/A03_2021-Injection/).
+This example demonstrates SQL and command injection vulnerabilities, which occur when untrusted data is sent to an interpreter as part of a command or query.
 
-- Vulnerable and secure login forms are available side by side for comparison.
-- The app runs by default on port 5003.
+## Scenario
+A web application implements login functionality using SQL and a file viewing feature using shell commands. In both cases, user input is directly incorporated into queries and commands without proper validation or parameterization, allowing attackers to manipulate the intended behavior.
 
-## How it works
-- The app uses a SQLite database with two users: `alice` and `bob`.
-- The `/login` route is vulnerable to SQL injection.
-- The `/login/safe` route uses parameterized queries to prevent injection.
-- The `/login/orm_vuln` route demonstrates ORM-based injection (vulnerable).
-- The `/login/orm_safe` route demonstrates safe ORM-based querying (parameterized).
-- The `/cmd_injection` route demonstrates a realistic command injection vulnerability via a 'View File' feature that unsafely passes user input to a shell command.
-- The `/safe_view_file` route demonstrates a safe file viewer that prevents command injection by validating input and not using the shell.
+## How to Run
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Run the app:
+   ```bash
+   python app.py
+   ```
+3. Visit [http://localhost:5003](http://localhost:5003) in your browser.
 
-## How to use
-1. Install dependencies: `pip install -r requirements.txt`
-2. Run the app: `python app.py`
-3. Try logging in with normal and malicious input on all four login forms:
-   - `/login` : Vulnerable SQL Injection (classic)
-   - `/login/safe` : Safe SQL (parameterized)
-   - `/login/orm_vuln` : Vulnerable ORM Injection
-   - `/login/orm_safe` : Safe ORM (parameterized)
-   - `/cmd_injection` : View File (Command Injection Demo, vulnerable)
-    - Example command injection: filename = `test.db; whoami` or `test.db; rm -rf /tmp`
-   - `/safe_view_file` : Safe File Viewer (prevents command injection)
-    - Example safe usage: filename = `testdb` (must be alphanumeric and in the current directory)
-   - Example SQL injection: username = `alice' --` , password = anything
-   - Example ORM injection: username = `' OR '1'='1`
+## Evidence Case: SQL and Command Injection
 
-## Vulnerability
-The `/login` route directly interpolates user input into SQL queries, allowing attackers to bypass authentication with crafted input.
+### SQL Injection Demos
+- Visit `/login` and attempt login with normal credentials: username=`alice`, password=`alice123`
+- Try a SQL injection attack: username=`alice' --`, password=anything
+- The attack bypasses authentication by commenting out the password check in SQL.
+- For comparison, try the same attack on the secure version at `/login/safe`
+- Similar examples are provided with ORM at `/login/orm_vuln` and `/login/orm_safe`
 
-## How to Fix
-- Always use parameterized queries or ORM methods to interact with databases.
-- Never concatenate or interpolate user input directly into SQL statements.
-- Validate and sanitize user input as an additional precaution.
+### Command Injection Demo
+- Visit `/cmd_injection` to see a file viewer that uses shell commands.
+- Enter normal input like `test.db` to view a file.
+- Try command injection using `test.db; whoami` or `test.db; rm -rf /tmp`
+- The attack executes arbitrary shell commands by abusing command concatenation.
+- For comparison, try the secure version at `/safe_view_file` with the same inputs.
 
-### Preventing Command Injection
-- **Never use user input directly in system commands.**
-- Use built-in APIs (like Python's file I/O) instead of shell commands for operations like file reading.
-- If you must use user input, strictly validate it (e.g., allow only alphanumeric filenames).
-- **Safe Example:** See `/safe_view_file` endpoint for a secure implementation.
+### Example Attack
+- SQL Injection: An attacker can bypass authentication or extract sensitive data by manipulating the SQL query structure.
+- Command Injection: An attacker can execute arbitrary system commands by breaking out of the intended command context.
+- Both vulnerabilities arise from the same root cause: direct incorporation of user input into interpreted contexts.
 
-## When is an Application Vulnerable to Injection?
-An application is vulnerable to injection attacks when:
+## Why is this Injection?
+- The flaw is in how user input is handled: it becomes part of the command/query syntax rather than being treated as data.
+- The application fails to distinguish between trusted code and untrusted data.
+- SQL injection exploits this by turning data into SQL syntax.
+- Command injection exploits this by escaping the intended command to execute additional commands.
+- These vulnerabilities can lead to data theft, modification, or destruction, and in the case of command injection, full system compromise.
 
-- **User-supplied data is not validated, filtered, or sanitized by the application.**
-  - Example: Accepting user input and passing it directly to the database or command line.
-- **Dynamic queries or non-parameterized calls without context-aware escaping are used directly in the interpreter.**
-  - Example: Building SQL queries using string concatenation with user input.
-- **Hostile data is used within object-relational mapping (ORM) search parameters to extract additional, sensitive records.**
-  - Example: Passing user input directly to ORM filter methods without validation.
-    This can lead to injection if the ORM does not parameterize the query internally or if raw SQL is used.
-- **Hostile data is directly used or concatenated. The SQL or command contains the structure and malicious data in dynamic queries, commands, or stored procedures.**
-  - Example: Using user input in system commands or stored procedures without sanitization.
+## How to Prevent
+- Use parameterized queries for database access instead of building dynamic queries:
+  - Use prepared statements with bind variables
+  - Use ORMs with proper parameterization
+  - Avoid dynamic queries entirely where possible
+- For command execution:
+  - Avoid using shell commands with user input when possible
+  - Use built-in language functions instead of shell commands
+  - If shell commands are necessary, strictly validate and sanitize inputs
+  - Consider allowlists for permitted values rather than trying to detect malicious input
+- Input validation should be applied, but is not a complete defense on its own
+- Apply the principle of least privilege to database accounts and system permissions
 
-    ```python
-    import os
-    user_input = request.args.get('filename')
-    # DANGEROUS: user_input could be something like 'foo.txt; rm -rf /'
-    os.system(f"cat {user_input}")
-    ```
-    This can allow attackers to execute arbitrary system commands if input is not sanitized.
+## Example Attack Scenarios
+**Scenario #1:** An application uses untrusted data in an SQL call:
+```sql
+String query = "SELECT * FROM accounts WHERE custID='" + request.getParameter("id") + "'";
+```
+An attacker can modify the 'id' parameter to bypass authentication or extract additional data.
+
+**Scenario #2:** An application naively accepts file paths for a system command:
+```python
+import os
+user_input = request.args.get('filename')
+# DANGEROUS: user_input could be 'file.txt; rm -rf /'
+os.system(f"cat {user_input}")
+```
+This allows attackers to execute arbitrary system commands by abusing command syntax.
+
+**Scenario #3:** A web application uses an ORM but still allows raw SQL:
+```python
+query = "SELECT * FROM products WHERE category = '" + productCategory + "'";
+```
+Even with ORM usage, raw SQL queries can introduce injection vulnerabilities if not properly parameterized.
+
+---
+
+**This is for educational purposes only. Never use such insecure patterns in production!**
+

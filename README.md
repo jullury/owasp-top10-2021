@@ -13,6 +13,8 @@ This repository contains demonstration code and examples for the [OWASP Top 10](
     - `/login/orm_safe` : Safe ORM (parameterized)
     - `/cmd_injection` : View File (Command Injection Demo, vulnerable to command injection)
     - `/safe_view_file` : Safe File Viewer (prevents command injection by validating input and not using the shell)
+- `A04/`: Demonstrates **Insecure Design** - Cinema booking system with flawed business logic allowing group size limit bypass
+    - `/book` : Group ticket booking system that demonstrates insecure design flaws
 - (Add more directories for each OWASP Top 10 item as you implement them)
 
 ## How to Use
