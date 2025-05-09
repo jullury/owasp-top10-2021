@@ -23,6 +23,7 @@ app.static_url_path = '/static'
 
 # Path to the static directory with demo files
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+SOURCE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
 CLASSES_DIR = os.path.join(STATIC_DIR, 'classes')
 
 # Ensure directories exist
@@ -32,7 +33,7 @@ os.makedirs(CLASSES_DIR, exist_ok=True)
 COMPILED_JAVA_CLASS = os.path.join(CLASSES_DIR, 'AdminController.class')
 
 # Path to "decompiled" Java source code (already created externally)
-DECOMPILED_JAVA = os.path.join(STATIC_DIR, 'AdminController.java')
+DECOMPILED_JAVA = os.path.join(SOURCE_DIR, 'com/insecureapp/controllers','AdminController.java')
 
 # Path to the sensitive configuration file (already created externally)
 CONFIG_FILE = os.path.join(STATIC_DIR, 'config.properties')

@@ -15,7 +15,10 @@ This repository contains demonstration code and examples for the [OWASP Top 10](
     - `/safe_view_file` : Safe File Viewer (prevents command injection by validating input and not using the shell)
 - `A04/`: Demonstrates **Insecure Design** - Cinema booking system with flawed business logic allowing group size limit bypass
     - `/book` : Group ticket booking system that demonstrates insecure design flaws
-- (Add more directories for each OWASP Top 10 item as you implement them)
+- `A05/`: Demonstrates **Security Misconfiguration** - Directory listing and sensitive file exposure:
+    - `/browse/` : Directory listing showing misconfigured server
+    - `/download-and-decompile` : Shows how attackers can extract sensitive information from exposed compiled code
+    - Includes Docker setup for testing with Apache .htaccess configurations
 
 ## How to Use
 
