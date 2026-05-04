@@ -1,20 +1,22 @@
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, render_template_string, request, jsonify, abort
 import os
-import traceback
+import logging
+import uuid
 
 app = Flask(__name__)
+
+# Configure logging for internal error tracking
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 @app.route('/')
 def index():
     return render_template_string('''
-    <h1>Mishandling of Exceptional Conditions Demo</h1>
+    <h1>Secure Error Handling Demo</h1>
     <ul>
-        <li><a href="/divide?a=10&b=0">Divide by Zero (Insecure)</a></li>
-        <li><a href="/file-read?file=nonexistent.txt">Read Non-existent File</a></li>
-        <li><a href="/api/users">API with Malformed Requests</a></li>
-        <li><a href="/upload">Upload (Crash-prone)</a></li>
-        <li><a href="/process?data=test">Process Data (Insecure)</a></li>
-        <li><a href="/secure-errors">Secure Error Handling</a></li>
+        <li><a href="/divide?a=10&b=2">Divide Numbers (Secure)</a></li>
+        <li><a href="/api/users">API with Error Handling</a></li>
+        <li><a href="/secure-errors">Secure Error Handling Practices</a></li>
     </ul>
     ''')
 
@@ -23,101 +25,132 @@ def divide():
     try:
         a = float(request.args.get('a', 0))
         b = float(request.args.get('b', 0))
+        if b == 0:
+            return render_template_string('''
+            <h1>Error</h1>
+            <p>Cannot divide by zero. Please provide a non-zero value for b.</p>
+            <a href="/">Back</a>
+            '''), 400
         result = a / b
         return f"Result: {result}"
-    except Exception as e:
-        # VULNERABLE: Exposing full traceback to user
+    except ValueError:
         return render_template_string('''
-        <h1>Error Occurred!</h1>
-        <h2>Exception Details:</h2>
-        <pre>{{ error }}</pre>
-        <h2>Traceback:</h2>
-        <pre>{{ traceback }}</pre>
-        <p><strong>VULNERABLE:</strong> Full error details exposed!</p>
-        ''', error=str(e), traceback=traceback.format_exc())
+        <h1>Invalid Input</h1>
+        <p>Please provide valid numbers for a and b.</p>
+        <a href="/">Back</a>
+        '''), 400
+    except Exception as e:
+        logger.error(f"Unexpected error in divide: {str(e)}")
+        return render_template_string('''
+        <h1>An Error Occurred</h1>
+        <p>Please try again later.</p>
+        <a href="/">Back</a>
+        '''), 500
 
 @app.route('/file-read')
 def file_read():
     filename = request.args.get('file', '')
+    if not filename or '..' in filename or filename.startswith('/'):
+        return render_template_string('''
+        <h1>Invalid Request</h1>
+        <p>The requested file cannot be accessed.</p>
+        <a href="/">Back</a>
+        '''), 400
     try:
-        # VULNERABLE: No input validation, path traversal possible
-        with open(filename, 'r') as f:
+        safe_path = os.path.join(os.getcwd(), 'safe_files', filename)
+        if not os.path.dirname(safe_path).endswith('safe_files'):
+            abort(400)
+        if not os.path.isfile(safe_path):
+            return render_template_string('''
+            <h1>File Not Found</h1>
+            <p>The requested file does not exist.</p>
+            <a href="/">Back</a>
+            '''), 404
+        with open(safe_path, 'r') as f:
             content = f.read()
         return f"File content: {content}"
     except Exception as e:
-        # VULNERABLE: Reveals file paths and OS details
+        logger.error(f"Error reading file: {str(e)}")
         return render_template_string('''
-        <h1>File Read Error!</h1>
-        <p>Failed to read file: {{ filename }}</p>
-        <h2>Error:</h2>
-        <pre>{{ error }}</pre>
-        <h2>Current working directory:</h2>
-        <p>{{ cwd }}</p>
-        <p><strong>VULNERABLE:</strong> Exposing file system details!</p>
-        ''', filename=filename, error=str(e), cwd=os.getcwd())
+        <h1>An Error Occurred</h1>
+        <p>Unable to read the requested file.</p>
+        <a href="/">Back</a>
+        '''), 500
 
 @app.route('/api/users')
 def api_users():
     try:
-        # VULNERABLE: No input validation
         user_id = request.args.get('id')
-        # Simulate database query that can fail
+        if not user_id:
+            return jsonify({"error": "Missing user ID", "code": "INVALID_REQUEST"}), 400
+        # Simulate database query
         if user_id == 'crash':
-            raise ValueError("Simulated database connection failed at line 123 in user_service.py")
+            logger.error(f"Simulated database error for user_id: {user_id}")
+            return jsonify({"error": "An error occurred", "code": "INTERNAL_ERROR", "request_id": str(uuid.uuid4())}), 500
         return jsonify({"id": user_id, "name": "John Doe"})
     except Exception as e:
-        # VULNERABLE: Full exception details in API response
-        return render_template_string('''
-        <h1>API Error</h1>
-        <h2>Exception:</h2>
-        <pre>{{ error }}</pre>
-        <h2>Stack Trace:</h2>
-        <pre>{{ traceback }}</pre>
-        <p><strong>VULNERABLE:</strong> API exposing internal details!</p>
-        ''', error=str(e), traceback=traceback.format_exc())
+        logger.error(f"API error: {str(e)}")
+        return jsonify({"error": "An error occurred", "code": "INTERNAL_ERROR", "request_id": str(uuid.uuid4())}), 500
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload():
     if request.method == 'POST':
         try:
-            # VULNERABLE: No file size limit, no proper error handling
+            if 'file' not in request.files:
+                return render_template_string('''
+                <h1>Error</h1>
+                <p>No file provided.</p>
+                <a href="/">Back</a>
+                '''), 400
             file = request.files['file']
-            # Simulate processing that can crash
-            if len(file.read()) > 1000000:
-                raise MemoryError("File too large, cannot process")
+            if file.content_length and file.content_length > 5000000:
+                return render_template_string('''
+                <h1>File Too Large</h1>
+                <p>Maximum file size is 5MB.</p>
+                <a href="/">Back</a>
+                '''), 400
             return "File uploaded successfully"
-        except MemoryError as e:
-            # VULNERABLE: Exposing internal error details
-            return f"Memory Error: {str(e)}\nApplication may be unstable now."
         except Exception as e:
-            return f"Unexpected error: {traceback.format_exc()}"
+            logger.error(f"Upload error: {str(e)}")
+            return render_template_string('''
+            <h1>Upload Failed</h1>
+            <p>Unable to process the file. Please try again.</p>
+            <a href="/">Back</a>
+            '''), 500
     return render_template_string('''
-    <h1>File Upload (Insecure)</h1>
+    <h1>File Upload</h1>
     <form method="POST" enctype="multipart/form-data">
         <input type="file" name="file">
         <input type="submit" value="Upload">
     </form>
-    <p><small>No file size limits or proper error handling!</small></p>
+    <p><small>Maximum file size: 5MB.</small></p>
     ''')
 
 @app.route('/process')
 def process():
     data = request.args.get('data', '')
     try:
-        # VULNERABLE: No input validation, can crash on special input
-        if data == 'crash':
-            raise Exception("Processing failed: invalid state in DataProcessor.process() at line 456")
+        if not data:
+            return render_template_string('''
+            <h1>Invalid Input</h1>
+            <p>No data provided for processing.</p>
+            <a href="/">Back</a>
+            '''), 400
+        if len(data) > 1000:
+            return render_template_string('''
+            <h1>Input Too Large</h1>
+            <p>Data exceeds maximum allowed size.</p>
+            <a href="/">Back</a>
+            '''), 400
         result = f"Processed: {data}"
         return result
     except Exception as e:
-        # VULNERABLE: Exposing internal processing details
+        logger.error(f"Processing error: {str(e)}")
         return render_template_string('''
         <h1>Processing Error</h1>
-        <p>Failed to process data.</p>
-        <h2>Internal Error Details:</h2>
-        <pre>{{ error }}</pre>
-        <p><strong>VULNERABLE:</strong> Revealing internal implementation!</p>
-        ''', error=str(e))
+        <p>Unable to process the data. Please try again.</p>
+        <a href="/">Back</a>
+        '''), 500
 
 @app.route('/secure-errors')
 def secure_errors():
@@ -143,7 +176,8 @@ def secure_errors():
     }
     </pre>
     <p><strong>This is the secure approach!</strong></p>
+    <a href="/">Back</a>
     ''')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5010)
+    app.run(debug=False, port=5010)

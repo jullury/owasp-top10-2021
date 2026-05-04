@@ -9,9 +9,11 @@ causing a massive loss of income.'
 This is a classic insecure design issue, where the individual validation checks appear secure 
 but the overall workflow and business logic contain critical flaws.
 """
-from flask import Flask, request, abort
+from flask import Flask, request, abort, escape
+import os
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(32).hex())
 
 # List of cinemas for the demo
 CINEMAS = ['Cinema 1', 'Cinema 2', 'Cinema 3'] 
@@ -28,6 +30,7 @@ def index():
     <h2>A04: Insecure Design Demo - Cinema Booking System</h2>
     <ul>
         <li><a href="/book">Book Group Tickets (Insecure Design)</a></li>
+        <li><a href="/secure-design">Secure Design Practices</a></li>
     </ul>
     <p>This demo shows a cinema booking system with insecure design flaws in its business logic validation.</p>
     <p>According to business rules, groups larger than 15 require a deposit, but the system architecture allows this to be bypassed.</p>
@@ -43,38 +46,33 @@ def book():
     available_seats = {cinema: MAX_CINEMA_SEATS - bookings[cinema] for cinema in CINEMAS}
     
     if request.method == 'POST':
-        cinema = request.form.get('cinema')
+        cinema = request.form.get('cinema', '')
         deposit_provided = request.form.get('deposit') == 'on'
+        
+        # Input validation
+        if cinema not in CINEMAS:
+            return abort(400, "Invalid cinema selection.")
         
         try:
             num_seats = int(request.form.get('num_seats', '0'))
         except ValueError:
-            num_seats = 0
+            return abort(400, "Invalid number of seats.")
             
         # Individual validations look secure, but the architecture allows bypassing business rules
-        if not cinema in CINEMAS:
-            message = "Invalid cinema selection."
-        elif num_seats <= 0:
+        if num_seats <= 0:
             message = "Number of seats must be positive."
-        # INSECURE DESIGN: We check each booking individually but don't prevent overbooking across multiple requests
-        # Notice we check the individual booking, NOT the total
-        # This makes it look like validation exists, but it's ineffective
         elif num_seats > MAX_CINEMA_SEATS:
             message = f"Cannot book {num_seats} seats at once. Maximum is {MAX_CINEMA_SEATS}."
         elif num_seats > MAX_GROUP_SIZE and not deposit_provided:
-            # This check LOOKS secure, but can be circumvented by making multiple smaller bookings
             deposit_warning = f"<p style='color:orange'>Groups larger than {MAX_GROUP_SIZE} require a deposit.</p>"
         else:
-            # INSECURE DESIGN: Nothing prevents multiple bookings that each stay under MAX_GROUP_SIZE
-            # But collectively exceed it without requiring a deposit
             bookings[cinema] += num_seats
-            message = f"Booked {num_seats} seats at {cinema}! (Total now: {bookings[cinema]})"
+            message = f"Booked {num_seats} seats at {escape(cinema)}! (Total now: {bookings[cinema]})"
             
-            # INSECURE DESIGN: No global checks for overbooking until AFTER we've already booked
             if bookings[cinema] > MAX_CINEMA_SEATS:
                 business_rule_note = f"<p style='color:red;'><b>BUSINESS RULE VIOLATED:</b> Cinema overbooked by {bookings[cinema] - MAX_CINEMA_SEATS} seats!</p>"
     
-    cinema_options = ''.join(f'<option value="{c}">{c}</option>' for c in CINEMAS)
+    cinema_options = ''.join(f'<option value="{escape(c)}">{escape(c)}</option>' for c in CINEMAS)
     return f'''
         <h3>Book Group Tickets (Insecure Design)</h3>
         
@@ -84,18 +82,11 @@ def book():
                 <li>Each cinema has {MAX_CINEMA_SEATS} seats total</li>
                 <li>Group bookings larger than {MAX_GROUP_SIZE} people require a deposit</li>
             </ul>
-            <p><b>Design Flaw:</b> The system validates individual bookings but has no protection against:
-            <ul>
-                <li>Multiple smaller bookings that collectively bypass the deposit requirement</li>
-                <li>Booking more than capacity across multiple requests</li>
-                <li>Rapid-fire booking requests (no rate limiting)</li>
-            </ul>
-            </p>
         </div>
         
         <form method="post">
             Cinema: <select name="cinema">{cinema_options}</select><br>
-            Number of seats: <input name="num_seats" type="number" min="1"><br>
+            Number of seats: <input name="num_seats" type="number" min="1" max="{MAX_CINEMA_SEATS}"><br>
             <input type="checkbox" name="deposit" id="deposit"> <label for="deposit">Pay deposit</label><br>
             <input type="submit" value="Book">
         </form>
@@ -106,20 +97,23 @@ def book():
         
         <h4>Current Bookings:</h4>
         <ul>
-            {''.join(f'<li>{cinema}: {bookings[cinema]}/{MAX_CINEMA_SEATS} seats booked</li>' for cinema in CINEMAS)}
+            {''.join(f'<li>{escape(cinema)}: {bookings[cinema]}/{MAX_CINEMA_SEATS} seats booked</li>' for cinema in CINEMAS)}
         </ul>
-        
-        <div style="border:1px solid #e88; padding:10px; margin-top:20px; background-color:#fff8f8">
-            <h4>Insecure Design Explanation:</h4>
-            <p>This system demonstrates insecure design because:</p>
-            <ul>
-                <li>The business logic is fragmented across requests with no centralized control</li>
-                <li>Individual validations exist but the system architecture allows them to be bypassed</li>
-                <li>The application lacks proper threat modeling for domain-specific attacks</li>
-            </ul>
-            <p><b>Try booking multiple small groups (under 15 each) without deposit to bypass the business rules!</b></p>
-        </div>
+    '''
+
+@app.route('/secure-design')
+def secure_design():
+    return '''
+        <h2>Secure Design Practices</h2>
+        <ul>
+            <li>Implement threat modeling during design phase</li>
+            <li>Use centralized validation and business logic controls</li>
+            <li>Implement rate limiting and request throttling</li>
+            <li>Add aggregate limits across multiple requests</li>
+            <li>Use secure design patterns and architecture reviews</li>
+        </ul>
+        <a href="/">Back</a>
     '''
 
 if __name__ == '__main__':
-    app.run(port=5004, debug=True)
+    app.run(port=5004, debug=False)
