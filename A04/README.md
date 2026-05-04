@@ -1,59 +1,73 @@
-# A04:2021 - Insecure Design Evidence Case
+# A04:2025 - Cryptographic Failures Evidence Case
 
-This example demonstrates an insecure design flaw in a cinema booking system, based on OWASP's Example Attack Scenario #2.
+This example demonstrates cryptographic failures in web applications, which occur when sensitive data is exposed due to weak or missing encryption.
 
 ## Scenario
-A cinema chain booking system has a business rule that group bookings larger than 15 attendees require a deposit. However, the system's design fails to enforce this rule effectively, allowing attackers to book hundreds of seats across multiple smaller transactions without paying any deposit, potentially causing significant business impact.
+
+A web application stores and handles sensitive data (user credentials and social security numbers) insecurely. Instead of proper encryption, it uses insufficient protection methods like plaintext storage, encoding instead of encryption, and hardcoded cryptographic keys. These failures expose sensitive data to attackers.
 
 ## How to Run
+
 1. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-2. Run the app:
+2. (Best Practice) Generate a secure Fernet key and set it in a `.env` file:
+   ```bash
+   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   ```
+   Copy the output and add it to your `.env` file as:
+   ```
+   FERNET_KEY="<your-generated-key>"
+   ```
+3. Run the app:
    ```bash
    python app.py
    ```
-3. Visit [http://localhost:5004](http://localhost:5004) in your browser.
+4. Visit [http://localhost:5004](http://localhost:5004) in your browser.
 
-## Evidence Case: Cinema Booking Insecure Design
-- Go to `/book`.
-- Notice that the business rules state groups larger than 15 require a deposit.
-- Try booking 16 seats and observe that the system asks for a deposit.
-- **The insecure design flaw:** Make multiple smaller bookings (e.g., 10 seats at a time) that each stay under the limit but collectively bypass the deposit requirement.
-- You can also book more seats than the cinema's capacity by making multiple requests.
+## Evidence Case: Cryptographic Failures
+
+- Visit the `/users` endpoint to see user data stored in plaintext, including passwords.
+- Visit the `/encode` endpoint to see how SSNs are merely base64-encoded (not encrypted).
+- Examine the `/decode` endpoint which allows anyone to decode the encoded data.
+- For comparison, check the `/secure-users` endpoint to see properly encrypted data.
 
 ### Example Attack
-- An attacker could book hundreds of seats across multiple small transactions without any deposit.
-- The application has individual validation checks but fails to implement centralized business logic controls.
-- There's no rate limiting, global validation, or transaction history checks.
 
-## Why is this Insecure Design?
-- The flaw is in the architecture: individual validations exist but are ineffective due to the fragmented business logic.
-- Input validation alone cannot fix this - the entire workflow and system architecture need redesign.
-- The application failed to consider proper threat modeling for the specific business domain.
-- The design doesn't account for how individual valid actions could collectively cause system-wide issues.
+- An attacker who gains access to the database can read all passwords directly since they're stored in plaintext.
+- An attacker can use the `/decode` endpoint to convert encoded (not encrypted) data back to plaintext.
+- If the application's source code is leaked, the hardcoded cryptographic key becomes known, compromising any data "protected" by it.
+
+## Why is this a Cryptographic Failure?
+
+- The flaw is in how sensitive data is protected (or not protected):
+  - Passwords stored in plaintext instead of being hashed
+  - SSNs encoded (reversible) instead of encrypted (requires key)
+  - Cryptographic keys hardcoded in the application
+  - Public endpoints for decoding sensitive data
+- These failures violate basic security principles for protecting sensitive data at rest and in transit.
+- Encoding (like base64) only obscures data but doesn't actually protect it cryptographically.
 
 ## How to Prevent
-- Establish and use a secure development lifecycle with AppSec professionals to help evaluate and design security and privacy-related controls.
-- Establish and use a library of secure design patterns or paved road ready-to-use components.
-- Use threat modeling for critical authentication, access control, business logic, and key flows.
-- Integrate security language and controls into user stories.
-- Integrate plausibility checks at each tier of your application (from frontend to backend).
-- Write unit and integration tests to validate that all critical flows are resistant to the threat model. Compile use-cases and misuse-cases for each tier of your application.
-- Segregate tier layers on the system and network layers depending on the exposure and protection needs.
-- Segregate tenants robustly by design throughout all tiers.
-- Limit resource consumption by user or service.
-- Require authentication before allowing password resets.
-- Use secure, time-limited reset tokens sent to the user's registered email.
-- Ensure that only the owner of the account can reset their password.
+
+- Store sensitive data encrypted at rest and protect it in transit with secure protocols.
+- Never store passwords in plain text; use strong adaptive hashing with salt (bcrypt, Argon2, PBKDF2).
+- Use modern, strong encryption algorithms and protocols (AES-256, RSA, etc.).
+- Generate, store, and manage keys securely; never hardcode them in source code.
+- Use proper key rotation and management practices.
+- Disable caching for responses containing sensitive data.
+- Store passwords using strong adaptive and salted hashing functions.
+- Apply appropriate security headers to prevent browser side caching.
+- Verify independently the effectiveness of configurations and settings.
 
 ## Example Attack Scenarios
-**Scenario #1:** A credential recovery workflow might include “questions and answers,” which is prohibited by NIST 800-63b, the OWASP ASVS, and the OWASP Top 10. Questions and answers cannot be trusted as evidence of identity as more than one person can know the answers, which is why they are prohibited. Such code should be removed and replaced with a more secure design.
 
-**Scenario #2:** A cinema chain allows group booking discounts and has a maximum of fifteen attendees before requiring a deposit. Attackers could threat model this flow and test if they could book six hundred seats and all cinemas at once in a few requests, causing a massive loss of income.
+**Scenario #1:** An application encrypts credit card numbers in a database using automatic database encryption. However, this data is automatically decrypted when retrieved, allowing an SQL injection flaw to retrieve credit card numbers in clear text.
 
-**Scenario #3:** A retail chain’s e-commerce website does not have protection against bots run by scalpers buying high-end video cards to resell auction websites. This creates terrible publicity for the video card makers and retail chain owners and enduring bad blood with enthusiasts who cannot obtain these cards at any price. Careful anti-bot design and domain logic rules, such as purchases made within a few seconds of availability, might identify inauthentic purchases and reject such transactions.
+**Scenario #2:** A website doesn't use TLS for all authenticated pages, allowing an attacker to monitor network traffic, steal an authenticated user's session cookie, and hijack the user's session.
+
+**Scenario #3:** A company's password database uses unsalted or simple hashes to store passwords. A file upload flaw allows an attacker to retrieve the password database. All unsalted hashes can be exposed with a rainbow table of pre-calculated hashes.
 
 ---
 
