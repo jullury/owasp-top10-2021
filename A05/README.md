@@ -1,13 +1,13 @@
-# A05:2021 - Security Misconfiguration Evidence Case
+# A05:2025 - Injection Evidence Case
 
-This example demonstrates a security misconfiguration vulnerability based on OWASP's Example Attack Scenario #2.
+This example demonstrates SQL and command injection vulnerabilities, which occur when untrusted data is sent to an interpreter as part of a command or query.
 
 ## Scenario
-Directory listing is not disabled on the server. An attacker discovers they can simply list directories. The attacker finds and downloads the compiled Java classes, which they decompile and reverse engineer to view the code. The attacker then finds a severe access control flaw in the application.
+
+A web application implements login functionality using SQL and a file viewing feature using shell commands. In both cases, user input is directly incorporated into queries and commands without proper validation or parameterization, allowing attackers to manipulate the intended behavior.
 
 ## How to Run
 
-### Option 1: Using Flask (Python)
 1. Install dependencies:
    ```bash
    pip install -r requirements.txt
@@ -18,78 +18,72 @@ Directory listing is not disabled on the server. An attacker discovers they can 
    ```
 3. Visit [http://localhost:5005](http://localhost:5005) in your browser.
 
-### Option 2: Using Docker with Apache (for .htaccess testing)
-1. Build the Docker image:
-   ```bash
-   cd A05
-   docker build -t a05-apache .
-   ```
-2. Run the container:
-   ```bash
-   docker run -d -p 8080:80 --name a05-apache-container a05-apache
-   ```
-3. Visit [http://localhost:8080](http://localhost:8080) in your browser.
-4. When finished, stop the container:
-   ```bash
-   docker stop a05-apache-container
-   docker rm a05-apache-container
-   ```
+## Evidence Case: SQL and Command Injection
 
-## Evidence Case: Directory Listing Security Misconfiguration
+### SQL Injection Demos
+- Visit `/login` and attempt login with normal credentials: username=`alice`, password=`alice123`
+- Try a SQL injection attack: username=`alice' --`, password=anything
+- The attack bypasses authentication by commenting out the password check in SQL.
+- For comparison, try the same attack on the secure version at `/login/safe`
+- Similar examples are provided with ORM at `/login/orm_vuln` and `/login/orm_safe`
 
-### Flask Implementation
-- Go to the application's main page
-- Click on the "Browse Directory Listing" button or navigate to `/browse/` URL
-- Notice that the server allows directory listing, exposing sensitive files
-- You can see all files within the directory, including ones that should not be accessible:
-  - `AdminController.java` - Source code with hard-coded credentials
-  - `classes/` - Directory with compiled Java classes
-  - `config.properties` - Configuration file with sensitive information
-  - `.htaccess` - Misconfigured server settings
-- Use the "Download and Decompile" link or navigate to `/download-and-decompile` to see how exposed compiled classes can be decompiled
-- The decompiled code reveals security flaws like hard-coded credentials and internal API endpoints
-
-### Apache Implementation (Docker)
-- The Docker container sets up Apache with intentionally misconfigured `.htaccess`
-- Navigate to http://localhost:8080 to see the directory listing due to `Options +Indexes` setting
-- The `.htaccess` file incorrectly allows access to sensitive file types like `.class`, `.properties`, and `.conf`
-- This demonstrates how improper server configurations can expose sensitive files
+### Command Injection Demo
+- Visit `/cmd_injection` to see a file viewer that uses shell commands.
+- Enter normal input like `test.db` to view a file.
+- Try command injection using `test.db; whoami` or `test.db; rm -rf /tmp`
+- The attack executes arbitrary shell commands by abusing command concatenation.
+- For comparison, try the secure version at `/safe_view_file` with the same inputs.
 
 ### Example Attack
-- An attacker browses to different directories on the server
-- The attacker discovers that directory listing is enabled
-- They download compiled Java classes from an exposed directory
-- By decompiling these classes, they extract sensitive information like:
-  - Hard-coded credentials
-  - Internal API endpoints
-  - Access control implementation flaws
+- SQL Injection: An attacker can bypass authentication or extract sensitive data by manipulating the SQL query structure.
+- Command Injection: An attacker can execute arbitrary system commands by breaking out of the intended command context.
+- Both vulnerabilities arise from the same root cause: direct incorporation of user input into interpreted contexts.
 
-## Why is this a Security Misconfiguration?
-- Directory listing should be disabled by default in production environments
-- Sensitive files like compiled code should not be stored in publicly accessible locations
-- The application exposes unnecessary information that helps attackers map the system
-- Proper server hardening would prevent this type of information disclosure
+## Why is this Injection?
+
+- The flaw is in how user input is handled: it becomes part of the command/query syntax rather than being treated as data.
+- The application fails to distinguish between trusted code and untrusted data.
+- SQL injection exploits this by turning data into SQL syntax.
+- Command injection exploits this by escaping the intended command to execute additional commands.
+- These vulnerabilities can lead to data theft, modification, or destruction, and in the case of command injection, full system compromise.
 
 ## How to Prevent
-- Implement a repeatable hardening process that makes it fast and easy to deploy properly locked down environments
-- Deploy a minimal platform without unnecessary features, components, documentation, and samples
-- Review and update configurations for all security notes, updates, and patches as part of the patch management process
-- Use a segmented application architecture that provides effective and secure separation between components
-- Send security directives to clients, such as Security Headers
-- Automate verification of configurations across all environments
-- Set up an automated process to verify effectiveness of configurations and settings in all environments
-- Disable directory listing on web servers
-- Store sensitive code and files outside web-accessible directories
+
+- Use parameterized queries for database access instead of building dynamic queries:
+  - Use prepared statements with bind variables
+  - Use ORMs with proper parameterization
+  - Avoid dynamic queries entirely where possible
+- For command execution:
+  - Avoid using shell commands with user input when possible
+  - Use built-in language functions instead of shell commands
+  - If shell commands are necessary, strictly validate and sanitize inputs
+  - Consider allowlists for permitted values rather than trying to detect malicious input
+- Input validation should be applied, but is not a complete defense on its own
+- Apply the principle of least privilege to database accounts and system permissions
 
 ## Example Attack Scenarios
-**Scenario #1:** The application server comes with sample applications that are not removed from the production server. These sample applications have known security flaws attackers use to compromise the server. Suppose one of these applications is the admin console, and default accounts weren't changed. In that case, the attacker logs in with default passwords and takes over.
 
-**Scenario #2:** Directory listing is not disabled on the server. An attacker discovers they can simply list directories. The attacker finds and downloads the compiled Java classes, which they decompile and reverse engineer to view the code. The attacker then finds a severe access control flaw in the application.
+**Scenario #1:** An application uses untrusted data in an SQL call:
+```sql
+String query = "SELECT * FROM accounts WHERE custID='" + request.getParameter("id") + "'";
+```
+An attacker can modify the 'id' parameter to bypass authentication or extract additional data.
 
-**Scenario #3:** The application server's configuration allows detailed error messages, e.g., stack traces, to be returned to users. This potentially exposes sensitive information or underlying flaws such as component versions that are known to be vulnerable.
+**Scenario #2:** An application naively accepts file paths for a system command:
+```python
+import os
+user_input = request.args.get('filename')
+# DANGEROUS: user_input could be 'file.txt; rm -rf /'
+os.system(f"cat {user_input}")
+```
+This allows attackers to execute arbitrary system commands by abusing command syntax.
 
-**Scenario #4:** A cloud service provider has default sharing permissions open to the Internet by other CSP users. This allows sensitive data stored within cloud storage to be accessed.
+**Scenario #3:** A web application uses an ORM but still allows raw SQL:
+```python
+query = "SELECT * FROM products WHERE category = '" + productCategory + "'";
+```
+Even with ORM usage, raw SQL queries can introduce injection vulnerabilities if not properly parameterized.
 
 ---
 
-**This is for educational purposes only. Never leave such insecure configurations in production!**
+**This is for educational purposes only. Never use such insecure patterns in production!**

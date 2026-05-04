@@ -1,67 +1,99 @@
-# A02:2021 - Cryptographic Failures Evidence Case
+# A02:2025 - Security Misconfiguration Evidence Case
 
-This example demonstrates cryptographic failures in web applications, which occur when sensitive data is exposed due to weak or missing encryption.
+This example demonstrates a security misconfiguration vulnerability based on OWASP's Example Attack Scenario #2.
 
 ## Scenario
-A web application stores and handles sensitive data (user credentials and social security numbers) insecurely. Instead of proper encryption, it uses insufficient protection methods like plaintext storage, encoding instead of encryption, and hardcoded cryptographic keys. These failures expose sensitive data to attackers.
+
+Directory listing is not disabled on the server. An attacker discovers they can simply list directories. The attacker finds and downloads the compiled Java classes, which they decompile and reverse engineer to view the code. The attacker then finds a severe access control flaw in the application.
 
 ## How to Run
+
+### Option 1: Using Flask (Python)
 1. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-2. (Best Practice) Generate a secure Fernet key and set it in a `.env` file:
-   ```bash
-   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-   ```
-   Copy the output and add it to your `.env` file as:
-   ```
-   FERNET_KEY="<your-generated-key>"
-   ```
-3. Run the app:
+2. Run the app:
    ```bash
    python app.py
    ```
-4. Visit [http://localhost:5002](http://localhost:5002) in your browser.
+3. Visit [http://localhost:5002](http://localhost:5002) in your browser.
 
-## Evidence Case: Cryptographic Failures
-- Visit the `/users` endpoint to see user data stored in plaintext, including passwords.
-- Visit the `/encode` endpoint to see how SSNs are merely base64-encoded (not encrypted).
-- Examine the `/decode` endpoint which allows anyone to decode the encoded data.
-- For comparison, check the `/secure-users` endpoint to see properly encrypted data.
+### Option 2: Using Docker with Apache (for .htaccess testing)
+1. Build the Docker image:
+   ```bash
+   cd A02
+   docker build -t a02-apache .
+   ```
+2. Run the container:
+   ```bash
+   docker run -d -p 8080:80 --name a02-apache-container a02-apache
+   ```
+3. Visit [http://localhost:8080](http://localhost:8080) in your browser.
+4. When finished, stop the container:
+   ```bash
+   docker stop a02-apache-container
+   docker rm a02-apache-container
+   ```
+
+## Evidence Case: Directory Listing Security Misconfiguration
+
+### Flask Implementation
+- Go to the application's main page
+- Click on the "Browse Directory Listing" button or navigate to `/browse/` URL
+- Notice that the server allows directory listing, exposing sensitive files
+- You can see all files within the directory, including ones that should not be accessible:
+  - `AdminController.java` - Source code with hard-coded credentials
+  - `classes/` - Directory with compiled Java classes
+  - `config.properties` - Configuration file with sensitive information
+  - `.htaccess` - Misconfigured server settings
+- Use the "Download and Decompile" link or navigate to `/download-and-decompile` to see how exposed compiled classes can be decompiled
+- The decompiled code reveals security flaws like hard-coded credentials and internal API endpoints
+
+### Apache Implementation (Docker)
+- The Docker container sets up Apache with intentionally misconfigured `.htaccess`
+- Navigate to http://localhost:8080 to see the directory listing due to `Options +Indexes` setting
+- The `.htaccess` file incorrectly allows access to sensitive file types like `.class`, `.properties`, and `.conf`
+- This demonstrates how improper server configurations can expose sensitive files
 
 ### Example Attack
-- An attacker who gains access to the database can read all passwords directly since they're stored in plaintext.
-- An attacker can use the `/decode` endpoint to convert encoded (not encrypted) data back to plaintext.
-- If the application's source code is leaked, the hardcoded cryptographic key becomes known, compromising any data "protected" by it.
+- An attacker browses to different directories on the server
+- The attacker discovers that directory listing is enabled
+- They download compiled Java classes from an exposed directory
+- By decompiling these classes, they extract sensitive information like:
+  - Hard-coded credentials
+  - Internal API endpoints
+  - Access control implementation flaws
 
-## Why is this a Cryptographic Failure?
-- The flaw is in how sensitive data is protected (or not protected):
-  - Passwords stored in plaintext instead of being hashed
-  - SSNs encoded (reversible) instead of encrypted (requires key)
-  - Cryptographic keys hardcoded in the application
-  - Public endpoints for decoding sensitive data
-- These failures violate basic security principles for protecting sensitive data at rest and in transit.
-- Encoding (like base64) only obscures data but doesn't actually protect it cryptographically.
+## Why is this a Security Misconfiguration?
+
+- Directory listing should be disabled by default in production environments
+- Sensitive files like compiled code should not be stored in publicly accessible locations
+- The application exposes unnecessary information that helps attackers map the system
+- Proper server hardening would prevent this type of information disclosure
 
 ## How to Prevent
-- Store sensitive data encrypted at rest and protect it in transit with secure protocols.
-- Never store passwords in plain text; use strong adaptive hashing with salt (bcrypt, Argon2, PBKDF2).
-- Use modern, strong encryption algorithms and protocols (AES-256, RSA, etc.).
-- Generate, store, and manage keys securely; never hardcode them in source code.
-- Use proper key rotation and management practices.
-- Disable caching for responses containing sensitive data.
-- Store passwords using strong adaptive and salted hashing functions.
-- Apply appropriate security headers to prevent browser side caching.
-- Verify independently the effectiveness of configurations and settings.
+
+- Implement a repeatable hardening process that makes it fast and easy to deploy properly locked down environments
+- Deploy a minimal platform without unnecessary features, components, documentation, and samples
+- Review and update configurations for all security notes, updates, and patches as part of the patch management process
+- Use a segmented application architecture that provides effective and secure separation between components
+- Send security directives to clients, such as Security Headers
+- Automate verification of configurations across all environments
+- Set up an automated process to verify effectiveness of configurations and settings in all environments
+- Disable directory listing on web servers
+- Store sensitive code and files outside web-accessible directories
 
 ## Example Attack Scenarios
-**Scenario #1:** An application encrypts credit card numbers in a database using automatic database encryption. However, this data is automatically decrypted when retrieved, allowing an SQL injection flaw to retrieve credit card numbers in clear text.
 
-**Scenario #2:** A website doesn't use TLS for all authenticated pages, allowing an attacker to monitor network traffic, steal an authenticated user's session cookie, and hijack the user's session.
+**Scenario #1:** The application server comes with sample applications that are not removed from the production server. These sample applications have known security flaws attackers use to compromise the server. Suppose one of these applications is the admin console, and default accounts weren't changed. In that case, the attacker logs in with default passwords and takes over.
 
-**Scenario #3:** A company's password database uses unsalted or simple hashes to store passwords. A file upload flaw allows an attacker to retrieve the password database. All unsalted hashes can be exposed with a rainbow table of pre-calculated hashes.
+**Scenario #2:** Directory listing is not disabled on the server. An attacker discovers they can simply list directories. The attacker finds and downloads the compiled Java classes, which they decompile and reverse engineer to view the code. The attacker then finds a severe access control flaw in the application.
+
+**Scenario #3:** The application server's configuration allows detailed error messages, e.g., stack traces, to be returned to users. This potentially exposes sensitive information or underlying flaws such as component versions that are known to be vulnerable.
+
+**Scenario #4:** A cloud service provider has default sharing permissions open to the Internet by other CSP users. This allows sensitive data stored within cloud storage to be accessed.
 
 ---
 
-**This is for educational purposes only. Never use such insecure patterns in production!**
+**This is for educational purposes only. Never leave such insecure configurations in production!**

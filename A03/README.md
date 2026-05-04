@@ -1,11 +1,13 @@
-# A03:2021 - Injection Evidence Case
+# A03:2025 - Software Supply Chain Failures Evidence Case
 
-This example demonstrates SQL and command injection vulnerabilities, which occur when untrusted data is sent to an interpreter as part of a command or query.
+This example demonstrates software supply chain failures, which occur when applications use vulnerable dependencies, fail to verify integrity of components, or inherit weaknesses from third-party code.
 
 ## Scenario
-A web application implements login functionality using SQL and a file viewing feature using shell commands. In both cases, user input is directly incorporated into queries and commands without proper validation or parameterization, allowing attackers to manipulate the intended behavior.
+
+A web application uses multiple third-party packages and dependencies without proper version pinning or integrity verification. Attackers can exploit known vulnerabilities in these dependencies or compromise the supply chain to inject malicious code into the application.
 
 ## How to Run
+
 1. Install dependencies:
    ```bash
    pip install -r requirements.txt
@@ -16,70 +18,49 @@ A web application implements login functionality using SQL and a file viewing fe
    ```
 3. Visit [http://localhost:5003](http://localhost:5003) in your browser.
 
-## Evidence Case: SQL and Command Injection
+## Evidence Case: Supply Chain Vulnerabilities
 
-### SQL Injection Demos
-- Visit `/login` and attempt login with normal credentials: username=`alice`, password=`alice123`
-- Try a SQL injection attack: username=`alice' --`, password=anything
-- The attack bypasses authentication by commenting out the password check in SQL.
-- For comparison, try the same attack on the secure version at `/login/safe`
-- Similar examples are provided with ORM at `/login/orm_vuln` and `/login/orm_safe`
-
-### Command Injection Demo
-- Visit `/cmd_injection` to see a file viewer that uses shell commands.
-- Enter normal input like `test.db` to view a file.
-- Try command injection using `test.db; whoami` or `test.db; rm -rf /tmp`
-- The attack executes arbitrary shell commands by abusing command concatenation.
-- For comparison, try the secure version at `/safe_view_file` with the same inputs.
+- Visit `/dependencies` to see all application dependencies and their versions.
+- Check `/vulnerable-deps` to see dependencies with known CVEs.
+- Visit `/integrity-check` to see how the application handles package integrity verification (or lack thereof).
+- Try the secure version at `/secure-deps` to see proper dependency management practices.
 
 ### Example Attack
-- SQL Injection: An attacker can bypass authentication or extract sensitive data by manipulating the SQL query structure.
-- Command Injection: An attacker can execute arbitrary system commands by breaking out of the intended command context.
-- Both vulnerabilities arise from the same root cause: direct incorporation of user input into interpreted contexts.
 
-## Why is this Injection?
-- The flaw is in how user input is handled: it becomes part of the command/query syntax rather than being treated as data.
-- The application fails to distinguish between trusted code and untrusted data.
-- SQL injection exploits this by turning data into SQL syntax.
-- Command injection exploits this by escaping the intended command to execute additional commands.
-- These vulnerabilities can lead to data theft, modification, or destruction, and in the case of command injection, full system compromise.
+- An attacker identifies a known vulnerability (CVE) in an application's dependency.
+- They exploit the vulnerability to gain unauthorized access or execute malicious code.
+- Without proper integrity checks, compromised packages can be silently injected into the supply chain.
+- Dependency confusion attacks can trick the application into downloading malicious packages from public repositories.
+
+## Why is this a Supply Chain Failure?
+
+- The application doesn't pin dependency versions, allowing automatic updates to vulnerable versions.
+- No integrity verification is performed on downloaded packages.
+- Known vulnerable dependencies are used without compensating controls.
+- The build pipeline may use compromised or untrusted components.
+- No software bill of materials (SBOM) is maintained to track all components.
 
 ## How to Prevent
-- Use parameterized queries for database access instead of building dynamic queries:
-  - Use prepared statements with bind variables
-  - Use ORMs with proper parameterization
-  - Avoid dynamic queries entirely where possible
-- For command execution:
-  - Avoid using shell commands with user input when possible
-  - Use built-in language functions instead of shell commands
-  - If shell commands are necessary, strictly validate and sanitize inputs
-  - Consider allowlists for permitted values rather than trying to detect malicious input
-- Input validation should be applied, but is not a complete defense on its own
-- Apply the principle of least privilege to database accounts and system permissions
+
+- Maintain an up-to-date inventory of all components (SBOM).
+- Only use trusted repositories and verify package integrity with hashes/signatures.
+- Pin dependency versions and use lockfiles to ensure reproducible builds.
+- Regularly scan dependencies for known vulnerabilities (CVEs).
+- Implement security checks in CI/CD pipelines for all third-party code.
+- Use private package repositories with access controls for internal dependencies.
+- Monitor security advisories for all used components.
+- Have a patch management process for quickly updating vulnerable dependencies.
 
 ## Example Attack Scenarios
-**Scenario #1:** An application uses untrusted data in an SQL call:
-```sql
-String query = "SELECT * FROM accounts WHERE custID='" + request.getParameter("id") + "'";
-```
-An attacker can modify the 'id' parameter to bypass authentication or extract additional data.
 
-**Scenario #2:** An application naively accepts file paths for a system command:
-```python
-import os
-user_input = request.args.get('filename')
-# DANGEROUS: user_input could be 'file.txt; rm -rf /'
-os.system(f"cat {user_input}")
-```
-This allows attackers to execute arbitrary system commands by abusing command syntax.
+**Scenario #1:** An application uses an outdated version of a popular JavaScript library with a known XSS vulnerability. An attacker exploits this vulnerability to inject malicious scripts into the application, affecting all users.
 
-**Scenario #3:** A web application uses an ORM but still allows raw SQL:
-```python
-query = "SELECT * FROM products WHERE category = '" + productCategory + "'";
-```
-Even with ORM usage, raw SQL queries can introduce injection vulnerabilities if not properly parameterized.
+**Scenario #2:** A build system downloads dependencies over an unencrypted connection. An attacker performs a man-in-the-middle attack and replaces a legitimate package with a malicious version that includes a backdoor.
+
+**Scenario #3:** A company's internal package name is not registered on the public PyPI repository. An attacker publishes a malicious package with the same name, and the build system downloads the malicious version instead of the internal one (dependency confusion attack).
+
+**Scenario #4:** A developer includes a development dependency (with known vulnerabilities) in the production build, exposing the application to attacks through the vulnerable component.
 
 ---
 
 **This is for educational purposes only. Never use such insecure patterns in production!**
-

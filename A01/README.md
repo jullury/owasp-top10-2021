@@ -1,4 +1,4 @@
-# A01:2021 - Broken Access Control Evidence Case
+# A01:2025 - Broken Access Control Evidence Case
 
 This example demonstrates broken access control, which occurs when restrictions on what authenticated users are allowed to do are not properly enforced.
 
