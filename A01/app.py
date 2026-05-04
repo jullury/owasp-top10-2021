@@ -1,11 +1,13 @@
 from flask import Flask, session, redirect, url_for, request, render_template_string
+import os
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = 'supersecretkey'  # Insecure for demo purposes only
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(32).hex())
 
 users = {
-    'alice': {'password': 'userpass', 'role': 'user'},
-    'bob': {'password': 'adminpass', 'role': 'admin'}
+    'alice': {'password_hash': generate_password_hash('userpass'), 'role': 'user'},
+    'bob': {'password_hash': generate_password_hash('adminpass'), 'role': 'admin'}
 }
 
 @app.route('/')
@@ -20,12 +22,12 @@ def login():
         username = request.form['username']
         password = request.form['password']
         user = users.get(username)
-        if user and user['password'] == password:
+        if user and check_password_hash(user['password_hash'], password):
             session['username'] = username
             session['role'] = user['role']
             return redirect(url_for('home'))
         return '''Invalid credentials<br><a href='/login'>Try again</a>'''
-
+    
     return '''
         <form method='post'>
             Username: <input name='username'><br>
@@ -41,8 +43,7 @@ def logout():
 
 @app.route('/admin')
 def admin():
-    # BROKEN ACCESS CONTROL: No role check!
-    if 'username' in session:
+    if 'username' in session and session.get('role') == 'admin':
         return f"Welcome to the admin page, {session['username']}! (role: {session['role']})"
     return redirect(url_for('login'))
 
@@ -54,4 +55,4 @@ def admin_secure():
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    app.run(port=5001, debug=True)
+    app.run(port=5001, debug=False)

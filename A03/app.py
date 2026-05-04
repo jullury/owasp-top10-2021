@@ -1,11 +1,9 @@
 from flask import Flask, render_template_string, jsonify, request
-import requests
-import subprocess
 import json
 
 app = Flask(__name__)
 
-# Vulnerable dependency list (some with known CVEs)
+# Dependency list (some with known CVEs)
 DEPENDENCIES = [
     {"name": "flask", "version": "2.3.2", "vulnerable": False},
     {"name": "requests", "version": "2.28.1", "vulnerable": False},
@@ -72,18 +70,12 @@ def integrity_check():
 @app.route('/install-package')
 def install_package():
     package = request.args.get('package', 'requests')
-    # VULNERABLE: Directly installing package without verification
-    try:
-        result = subprocess.run(['pip', 'install', package], capture_output=True, text=True)
-        return render_template_string('''
-        <h1>Package Installation</h1>
-        <p>Installing: {{ package }}</p>
-        <pre>{{ output }}</pre>
-        <p><strong>Warning:</strong> No integrity verification performed!</p>
-        <a href="/">Back to Home</a>
-        ''', package=package, output=result.stdout)
-    except Exception as e:
-        return str(e)
+    return render_template_string('''
+    <h1>Package Installation (Disabled)</h1>
+    <p>Package installation has been disabled for security.</p>
+    <p><strong>Note:</strong> Never install packages directly from user input.</p>
+    <a href="/">Back to Home</a>
+    ''')
 
 @app.route('/secure-deps')
 def secure_deps():
@@ -103,4 +95,4 @@ def secure_deps():
     ''')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5003)
+    app.run(debug=False, port=5003)

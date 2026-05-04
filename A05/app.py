@@ -1,6 +1,7 @@
-from flask import Flask, request
+from flask import Flask, request, render_template_string
 import sqlite3
 import os
+from werkzeug.security import generate_password_hash
 
 app = Flask(__name__)
 DB_PATH = 'test.db'
@@ -9,48 +10,20 @@ DB_PATH = 'test.db'
 if not os.path.exists(DB_PATH):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password TEXT)')
-    c.execute('INSERT INTO users (username, password) VALUES (?, ?)', ('alice', 'wonderland'))
-    c.execute('INSERT INTO users (username, password) VALUES (?, ?)', ('bob', 'builder'))
+    c.execute('CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT)')
+    c.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', ('alice', generate_password_hash('wonderland')))
+    c.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', ('bob', generate_password_hash('builder')))
     conn.commit()
     conn.close()
 
 @app.route('/')
 def index():
     return '''
-        <h2>A03: Injection Demo</h2>
-        <a href="/login">Vulnerable Login (SQL Injection)</a><br>
+        <h2>A03: Injection - Secure Demo</h2>
         <a href="/login/safe">Safe Login (Parameterized)</a><br>
-        <a href="/login/orm_vuln">Vulnerable ORM Login</a><br>
         <a href="/login/orm_safe">Safe ORM Login</a><br>
-        <a href="/cmd_injection">Command Injection</a><br>
         <a href="/safe_view_file">Safe File Viewer</a><br>
-    '''
-
-# Vulnerable to SQL Injection
-@app.route('/login', methods=['GET', 'POST'])
-def login_vuln():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        # DANGEROUS: User input directly in SQL
-        query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
-        c.execute(query)
-        user = c.fetchone()
-        conn.close()
-        if user:
-            return f"Welcome, {username}! (Vulnerable login)"
-        return "Invalid credentials. Try again."
-    return '''
-        <h3>Vulnerable Login</h3>
-        <form method='post'>
-            Username: <input name='username'><br>
-            Password: <input name='password' type='password'><br>
-            <input type='submit' value='Login'>
-        </form>
-        <p>Try SQL Injection: username = alice' -- , password = anything</p>
+        <a href="/security-info">Security Practices</a><br>
     '''
 
 # Safe from SQL Injection
@@ -62,7 +35,7 @@ def login_safe():
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         # SAFE: Parameterized query
-        c.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, password))
+        c.execute('SELECT * FROM users WHERE username = ? AND password_hash = ?', (username, password))
         user = c.fetchone()
         conn.close()
         if user:
@@ -75,6 +48,7 @@ def login_safe():
             Password: <input name='password' type='password'><br>
             <input type='submit' value='Login'>
         </form>
+        <p>Uses parameterized queries to prevent SQL injection.</p>
     '''
 
 from flask_sqlalchemy import SQLAlchemy
@@ -84,42 +58,17 @@ db = SQLAlchemy(app)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(120), nullable=False)
+    password_hash = db.Column(db.String(120), nullable=False)
 
 # Ensure the ORM table exists and insert demo users if not present
 with app.app_context():
     db.create_all()
     # Insert demo users if not already present
     if not User.query.filter_by(username='alice').first():
-        db.session.add(User(username='alice', password='wonderland'))
+        db.session.add(User(username='alice', password_hash=generate_password_hash('wonderland')))
     if not User.query.filter_by(username='bob').first():
-        db.session.add(User(username='bob', password='builder'))
+        db.session.add(User(username='bob', password_hash=generate_password_hash('builder')))
     db.session.commit()
-
-@app.route('/login/orm_vuln', methods=['GET', 'POST'])
-def orm_vuln():
-    message = ''
-    if request.method == 'POST':
-        user_input = request.form.get('username', '')
-        # DANGEROUS: Directly interpolating user input into ORM filter
-        try:
-            from sqlalchemy import text
-            user = User.query.filter(text(f"username = '{user_input}'")).first()
-            if user:
-                message = f"Found user: {user.username}"
-            else:
-                message = "No user found."
-        except Exception as e:
-            message = f"Error: {e}"
-    return f'''
-        <h3>Vulnerable ORM Login</h3>
-        <form method="post">
-            Username: <input name="username"><br>
-            <input type="submit" value="Lookup">
-        </form>
-        <p>{message}</p>
-        <p>Try injection: <code>' OR '1'='1</code></p>
-    '''
 
 @app.route('/login/orm_safe', methods=['GET', 'POST'])
 def orm_safe():
@@ -139,37 +88,7 @@ def orm_safe():
             <input type="submit" value="Lookup">
         </form>
         <p>{message}</p>
-    '''
-
-# Command Injection Demo (DANGEROUS: for demonstration only)
-@app.route('/cmd_injection', methods=['GET', 'POST'])
-def cmd_injection():
-    import subprocess
-    from flask import request
-    output = ''
-    if request.method == 'POST':
-        filename = request.form.get('filename', '')
-        # DANGEROUS: vulnerable to command injection
-        proc = subprocess.run(f"cat {filename}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        try:
-            decoded = proc.stdout.decode('utf-8')
-        except UnicodeDecodeError:
-            decoded = proc.stdout.decode('utf-8', errors='replace')
-        output = f"<pre>{decoded}</pre>"
-    return f'''
-        <h3>View File (Command Injection Demo)</h3>
-        <p><b>Example payloads:</b></p>
-        <ul>
-            <li><code>test.db</code> (safe, shows contents of test.db)</li>
-            <li><code>test.db; whoami</code> (unsafe, demonstrates command injection)</li>
-            <li><code>test.db; rm -rf /tmp</code> (dangerous, demonstrates destructive command injection)</li>
-        </ul>
-        <form method="post">
-            Filename: <input name="filename" type="text"><br>
-            <input type="submit" value="View">
-        </form>
-        {output}
-        <p>DANGEROUS: Never use user input in system commands!</p>
+        <p>Uses ORM filter_by() which parameterizes queries.</p>
     '''
 
 # Safe File Viewer Demo (prevents command injection)
@@ -178,7 +97,7 @@ def safe_view_file():
     from flask import request, abort
     import os
     output = ''
-    safe_dir = os.path.abspath('.')  # For demo, use current directory; in production, use a dedicated safe directory
+    safe_dir = os.path.abspath('.')
     if request.method == 'POST':
         filename = request.form.get('filename', '')
         # Only allow alphanumeric filenames (no path traversal, no shell metacharacters)
@@ -195,11 +114,9 @@ def safe_view_file():
         output = f"<pre>{content}</pre>"
     return f'''
         <h3>Safe File Viewer (No Command Injection)</h3>
-        <p><b>Example payloads:</b></p>
+        <p><b>Allowed filenames (alphanumeric only):</b></p>
         <ul>
-            <li><code>testdb</code> (allowed, shows contents of testdb if present)</li>
-            <li><code>test.db</code> (blocked, not alphanumeric)</li>
-            <li><code>test.db; whoami</code> (blocked, not alphanumeric)</li>
+            <li><code>testdb</code> (allowed, shows contents if present)</li>
         </ul>
         <form method="post">
             Filename: <input name="filename" type="text"><br>
@@ -207,8 +124,21 @@ def safe_view_file():
         </form>
         {output}
         <p>This demo prevents command injection by validating input and not using the shell.</p>
-        <p>Only alphanumeric filenames in the current directory are allowed.</p>
     '''
 
+@app.route('/security-info')
+def security_info():
+    return render_template_string('''
+    <h2>Security Practices Implemented</h2>
+    <ul>
+        <li>SQL queries use parameterized statements (no string formatting)</li>
+        <li>ORM queries use filter_by() (not raw string interpolation)</li>
+        <li>File viewing validates input and avoids shell commands</li>
+        <li>Passwords are hashed (not stored in plaintext)</li>
+        <li>Debug mode is disabled</li>
+    </ul>
+    <a href="/">Back</a>
+    ''')
+
 if __name__ == '__main__':
-    app.run(port=5003, debug=True)
+    app.run(port=5003, debug=False)

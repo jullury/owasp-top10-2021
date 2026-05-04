@@ -1,32 +1,30 @@
-from flask import Flask, render_template_string, request, session, redirect, url_for, jsonify
-from flask import session as login_session
-import hashlib
+from flask import Flask, render_template_string, request, session, redirect, url_for
+import os
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = 'weak-secret-key-123'  # VULNERABLE: Hardcoded weak secret
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(32).hex())
 
-# Insecure user store (in production, use a database)
+# Secure user store with hashed passwords
 USERS = {
-    'admin': hashlib.md5('admin'.encode()).hexdigest(),  # VULNERABLE: MD5 hashing
-    'alice': hashlib.md5('password123'.encode()).hexdigest(),
-    'bob': hashlib.md5('123456'.encode()).hexdigest()
+    'admin': generate_password_hash('admin'),
+    'alice': generate_password_hash('password123'),
+    'bob': generate_password_hash('123456')
 }
 
 @app.route('/')
 def index():
     logged_in = 'username' in session
     return render_template_string('''
-    <h1>Authentication Failures Demo</h1>
+    <h1>Authentication Failures Demo (Secure)</h1>
     {% if logged_in %}
         <p>Welcome, {{ session.username }}!</p>
         <a href="/logout">Logout</a>
     {% else %}
         <ul>
-            <li><a href="/login">Login (Insecure)</a></li>
-            <li><a href="/register">Register (Insecure)</a></li>
-            <li><a href="/forgot-password">Forgot Password</a></li>
-            <li><a href="/brute-force">Brute Force Test</a></li>
-            <li><a href="/secure-login">Login (Secure)</a></li>
+            <li><a href="/login">Login (Secure)</a></li>
+            <li><a href="/register">Register (Secure)</a></li>
+            <li><a href="/secure-practices">Security Practices</a></li>
         </ul>
     {% endif %}
     ''')
@@ -34,13 +32,10 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username', '')
+        username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         
-        # VULNERABLE: Weak MD5 hashing, no rate limiting
-        password_hash = hashlib.md5(password.encode()).hexdigest()
-        
-        if username in USERS and USERS[username] == password_hash:
+        if username in USERS and check_password_hash(USERS[username], password):
             session['username'] = username
             return redirect(url_for('index'))
         else:
@@ -51,71 +46,56 @@ def login():
             ''')
     
     return render_template_string('''
-    <h1>Login (Insecure)</h1>
+    <h1>Login (Secure)</h1>
     <form method="POST">
         Username: <input type="text" name="username"><br>
         Password: <input type="password" name="password"><br>
         <input type="submit" value="Login">
     </form>
-    <p><small>No rate limiting - vulnerable to brute force!</small></p>
+    <p><small>Uses strong password hashing (no MD5).</small></p>
     ''')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form.get('username', '')
+        username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         
-        # VULNERABLE: No password complexity validation
-        if username and password:
-            USERS[username] = hashlib.md5(password.encode()).hexdigest()
+        if username and password and len(password) >= 8:
+            USERS[username] = generate_password_hash(password)
             return render_template_string('<h1>Registered!</h1><a href="/login">Login</a>')
+        else:
+            return render_template_string('<h1>Error</h1><p>Password must be at least 8 characters.</p><a href="/register">Back</a>')
     
     return render_template_string('''
-    <h1>Register (Insecure)</h1>
+    <h1>Register (Secure)</h1>
     <form method="POST">
         Username: <input type="text" name="username"><br>
         Password: <input type="password" name="password"><br>
         <input type="submit" value="Register">
     </form>
-    <p><small>Accepts any password, even "123" or "password"!</small></p>
+    <p><small>Password must be at least 8 characters.</small></p>
     ''')
 
-@app.route('/forgot-password')
-def forgot_password():
+@app.route('/secure-practices')
+def secure_practices():
     return render_template_string('''
-    <h1>Forgot Password (Insecure)</h1>
-    <p>Enter your security question answer:</p>
-    <form>
-        Username: <input type="text" name="username"><br>
-        Mother's maiden name: <input type="text" name="answer"><br>
-        <input type="submit" value="Reset Password">
-    </form>
-    <p><small>VULNERABLE: Security questions are insecure!</small></p>
-    ''')
-
-@app.route('/brute-force')
-def brute_force():
-    return render_template_string('''
-    <h1>Brute Force Test</h1>
-    <p>Try common passwords: admin/admin, alice/password123, bob/123456</p>
-    <p><strong>No rate limiting implemented!</strong></p>
-    <a href="/login">Try Login</a>
-    ''')
-
-@app.route('/secure-login')
-def secure_login_info():
-    return render_template_string('''
-    <h1>Secure Authentication (Best Practices)</h1>
+    <h1>Secure Authentication Practices</h1>
     <ul>
-        <li>Use strong password hashing (bcrypt, Argon2)</li>
+        <li>Use strong password hashing (bcrypt, Argon2, or Werkzeug's default)</li>
         <li>Implement rate limiting and account lockout</li>
         <li>Enforce password complexity requirements</li>
         <li>Use multi-factor authentication (MFA)</li>
         <li>Generate secure random session tokens</li>
         <li>Use secure password recovery (time-limited tokens)</li>
     </ul>
-    <p><strong>This is the secure approach!</strong></p>
+    <p><strong>Security improvements made:</strong></p>
+    <ul>
+        <li>MD5 replaced with Werkzeug's secure hashing</li>
+        <li>Secret key is no longer hardcoded</li>
+        <li>Password minimum length enforced</li>
+    </ul>
+    <a href="/">Back</a>
     ''')
 
 @app.route('/logout')
@@ -124,4 +104,4 @@ def logout():
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5007)
+    app.run(debug=False, port=5007)
